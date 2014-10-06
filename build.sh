@@ -6,6 +6,7 @@ set -o pipefail
 PROGRAM_NAME="py_skelly"
 SRC_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALL_PATH="/usr/local/bin/"
+SYSTEM_DEPS="python,python-dev"
 
 clean() {
     rm -rf $SRC_DIR/build
@@ -21,7 +22,7 @@ make() {
     cd $SRC_DIR
     $INSTALL_PATH/$PROGRAM_NAME/bin/python setup.py install
 
-    fpm -s dir -t deb -n $PROGRAM_NAME -v 1.0 -d "python,python-dev" \
+    fpm -s dir -t deb -n $PROGRAM_NAME -v 1.0 -d $SYSTEM_DEPS \
         $INSTALL_PATH/$PROGRAM_NAME=$INSTALL_PATH
 }
 
