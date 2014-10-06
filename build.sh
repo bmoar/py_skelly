@@ -3,12 +3,15 @@
 set -eu
 set -o pipefail
 
-PROGRAM_NAME="db-migration-script"
+PROGRAM_NAME="py_skelly"
 SRC_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALL_PATH="/usr/local/bin/"
 
 clean() {
-    rm -rf "$INSTALL_PATH/$PROGRAM_NAME"
+    rm -rf $SRC_DIR/build
+    rm -rf $SRC_DIR/dist
+    rm -rf $SRC_DIR/*.egg-info
+    rm -rf $SRC_DIR/*.deb
 }
 
 make() {
@@ -22,9 +25,27 @@ make() {
         $INSTALL_PATH/$PROGRAM_NAME=$INSTALL_PATH
 }
 
-main() {
-    clean
-    make
+usage() {
+    echo "build.sh < clean | make >"
+    exit 1
 }
 
-main
+main() {
+    case $1 in
+        clean)
+            clean
+            ;;
+        make)
+            make
+            ;;
+        *)
+            usage
+            ;;
+    esac
+}
+
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+main $1

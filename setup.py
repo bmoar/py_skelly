@@ -6,9 +6,9 @@ setup(name='skelly',
         packages=find_packages(),
         package_data={"conf": "skelly/conf/*"},
         zip_safe=False,
-        entry_point={
+        entry_points={
             'console_scripts': [
-                'create_shard_database = db-migration-script.create_shard_database'
+                'hello = skelly.scripts.hello:main'
             ]
         },
         install_requires=[])
