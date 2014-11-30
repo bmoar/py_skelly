@@ -18,6 +18,7 @@ _clean_dirs() {
 
 _clean_py() {
     rm -rf $SRC_DIR/setup.py
+    rm -rf $SRC_DIR/*.egg-info
 }
 
 _generate_dirs() {
@@ -47,7 +48,7 @@ setup(
         'randomize',
         'factory-boy',
         'fake-factory',
-    ])
+    ],
     tests_require=['nose'],
     test_suite='nose.collector',
     classifiers=[
@@ -80,6 +81,23 @@ generate() {
     _generate_setuppy
 }
 
+make_virtualenv() {
+
+    # remove old virtualenv
+    rm -rf $HOME/.virtualenvs/$PROGRAM_NAME
+
+    # create new virtualenv
+    mkdir -p $HOME/.virtualenvs/
+    virtualenv $HOME/.virtualenvs/$PROGRAM_NAME
+
+    # install app
+    set +u
+    source $HOME/.virtualenvs/$PROGRAM_NAME/bin/activate
+    set -u
+    python $SRC_DIR/setup.py develop
+
+}
+
 usage() {
 cat <<EOF
 build.sh option [arg]
@@ -106,6 +124,7 @@ main() {
 
         case $arg in
             -b|--bootstrap|bootstrap)
+                _setup "${args[i]}"
                 bootstrap
                 break
                 ;;
@@ -120,6 +139,7 @@ main() {
                 break
                 ;;
             -v|--virtualenv|virtualenv)
+                _setup "${args[i]}"
                 make_virtualenv
                 break
                 ;;
