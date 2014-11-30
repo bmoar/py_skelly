@@ -88,11 +88,19 @@ def create_app():
 
     app.setup()
 
-    app.args.add_argument('-f', '--foo', action='store', dest='foo', help='Testing foo option')
+    app.args.add_argument('-t', '--tests', action='store_true', dest='tests', help='Run nose tests')
 
     app.run()
 
     return app
+
+def tests(app=None):
+    import nose
+    from nose.plugins.cover import Coverage
+
+    nose.main(argv=['', '--randomize', '--with-coverage',
+        '--cover-branches', '--cover-package=global_app'],
+        addplugins=[Coverage()])
 
 def main():
     # TODO: configure step
@@ -107,9 +115,10 @@ def main():
         log.debug('Exception: %s' % (e))
         if app:
             app.close()
-
-    if app.pargs.foo:
-        log.info('Recieved foo argument')
+    if app.pargs.tests:
+        tests()
+    else:
+        log.info('Entry point hit')
 
     app.close()
 
@@ -210,7 +219,7 @@ class BasicsTestCase(unittest.TestCase):
         pass
 
     def test_entry_point(self):
-        main()
+        pass
 
 EOF
 
