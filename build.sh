@@ -50,7 +50,7 @@ setup(
     zip_safe=False,
     entry_points={
         'console_scripts': [
-            'hello = $PROGRAM_NAME.scripts.hello:main'
+            'ci = global_app.scripts.ci:main',
         ]
     },
     install_requires=[
@@ -59,6 +59,7 @@ setup(
         'randomize',
         'factory-boy',
         'fake-factory',
+        'cement'
     ],
     tests_require=['nose'],
     test_suite='nose.collector',
@@ -71,13 +72,50 @@ EOF
 }
 
 _generate_entrypoint() {
-    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/scripts/hello.py
+    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/scripts/ci.py
+"""
+    Entry point for CI scripts
+"""
+
+from cement.core import foundation
+from global_app.conf.logger import init_logger
+
+def create_app():
+    """
+        Configures an application according to env
+    """
+    app = foundation.CementApp('testing')
+
+    app.setup()
+
+    app.args.add_argument('-f', '--foo', action='store', dest='foo', help='Testing foo option')
+
+    app.run()
+
+    return app
 
 def main():
-    print('hello world!')
+    # TODO: configure step
+
+    log = init_logger(logger='debug')
+    app = None
+
+    try:
+        app = create_app()
+    except Exception as e:
+        log.error('Failed to create app')
+        log.debug('Exception: %s' % (e))
+        if app:
+            app.close()
+
+    if app.pargs.foo:
+        log.info('Recieved foo argument')
+
+    app.close()
 
 if __name__ == '__main__':
     main()
+
 EOF
 
 }
@@ -94,7 +132,7 @@ class SyslogtagFilter():
         record.syslogtag = self.syslogtag
         return True
 
-def init_logger(syslogtag='$PROGRAM_NAME', handler='stderr'):
+def init_logger(syslogtag='$PROGRAM_NAME', logger='debug'):
     import logging, logging.config
 
     loggers = {
@@ -128,12 +166,12 @@ def init_logger(syslogtag='$PROGRAM_NAME', handler='stderr'):
             'loggers': {
                 'stderr': {
                     'level': 'INFO',
-                    'handlers': ['stderr', 'syslog'],
+                    'handlers': ['stderr'],
                     'propagate': False,
                     },
                 'debug': {
                     'level': 'DEBUG',
-                    'handlers': ['stderr', 'syslog'],
+                    'handlers': ['stderr'],
                     'propagate': False,
                     },
                 'prod': {
@@ -153,7 +191,7 @@ def init_logger(syslogtag='$PROGRAM_NAME', handler='stderr'):
                 },
             }
     logging.config.dictConfig(loggers)
-    return logging.getLogger(handler)
+    return logging.getLogger(logger)
 EOF
 
 }
@@ -162,8 +200,7 @@ _generate_tests() {
 
 cat <<EOF > $SRC_DIR/$PROGRAM_NAME/tests/test_hello.py
 import unittest
-from $PROGRAM_NAME.scripts.hello import main
-from $PROGRAM_NAME.conf.logger import init_logger
+from $PROGRAM_NAME.scripts.ci import main
 
 class BasicsTestCase(unittest.TestCase):
     def setUp(self):
@@ -172,12 +209,8 @@ class BasicsTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_main(self):
+    def test_entry_point(self):
         main()
-
-    def test_logger(self):
-        logger = init_logger()
-        logger.info("this is a test")
 
 EOF
 
@@ -217,13 +250,13 @@ make_virtualenv() {
 
     # create new virtualenv
     mkdir -p $HOME/.virtualenvs/
-    virtualenv $HOME/.virtualenvs/$PROGRAM_NAME
+    virtualenv -p /usr/bin/python3 $HOME/.virtualenvs/$PROGRAM_NAME
 
     # install app
     set +u
     source $HOME/.virtualenvs/$PROGRAM_NAME/bin/activate
     set -u
-    python $SRC_DIR/setup.py develop
+    python3 $SRC_DIR/setup.py develop
 
 }
 
