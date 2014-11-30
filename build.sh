@@ -16,13 +16,49 @@ _clean_dirs() {
     done
 }
 
+_clean_py() {
+    rm -rf $SRC_DIR/setup.py
+}
+
 _generate_dirs() {
     for dir in "${dirs[@]}"; do
         mkdir -p $dir
     done
 }
 
-_setup_dirs() {
+_generate_setuppy() {
+    cat <<EOF > $SRC_DIR/setup.py
+from setuptools import setup, find_packages
+
+setup(
+    name='$PROGRAM_NAME',
+    version='0.0',
+    packages=find_packages(),
+    package_data={"conf": "$PROGRAM_NAME/conf/*"},
+    zip_safe=False,
+    entry_points={
+        'console_scripts': [
+            'hello = $PROGRAM_NAME.scripts.hello:main'
+        ]
+    },
+    install_requires=[
+        'nose',
+        'coverage',
+        'randomize',
+        'factory-boy',
+        'fake-factory',
+    ])
+    tests_require=['nose'],
+    test_suite='nose.collector',
+    classifiers=[
+        'Private :: Do Not Upload'
+    ],
+    dependency_links=[]
+)
+EOF
+}
+
+_setup() {
     dirs=(
         "docs"
         "$1"
@@ -30,14 +66,18 @@ _setup_dirs() {
         "$1/tests"
         "$1/conf"
     )
+
+    PROGRAM_NAME=$1
 }
 
 clean() {
     _clean_dirs
+    _clean_py
 }
 
 generate() {
     _generate_dirs
+    _generate_setuppy
 }
 
 usage() {
@@ -70,12 +110,12 @@ main() {
                 break
                 ;;
             -g|--generate|generate)
-                _setup_dirs "${args[i]}"
+                _setup "${args[i]}"
                 generate
                 break
                 ;;
             -c|--clean|clean)
-                _setup_dirs "${args[i]}"
+                _setup "${args[i]}"
                 clean
                 break
                 ;;
