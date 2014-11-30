@@ -9,10 +9,15 @@ INSTALL_PATH="/usr/local/bin/"
 SYSTEM_DEPS="python,python-dev"
 
 dirs=()
+pydirs=()
 
 _clean_dirs() {
     for dir in "${dirs[@]}"; do
-        rm -rf $dir
+        rm -rf $SRC_DIR/$dir
+    done
+
+    for dir in "${pydirs[@]}"; do
+        rm -rf $SRC_DIR/$dir
     done
 }
 
@@ -23,7 +28,13 @@ _clean_py() {
 
 _generate_dirs() {
     for dir in "${dirs[@]}"; do
-        mkdir -p $dir
+        mkdir -p $SRC_DIR/$dir
+    done
+
+    # python module dirs need an init
+    for dir in "${pydirs[@]}"; do
+        mkdir -p $SRC_DIR/$dir
+        touch $SRC_DIR/$dir/__init__.py
     done
 }
 
@@ -59,9 +70,24 @@ setup(
 EOF
 }
 
+_generate_entrypoint() {
+    touch $SRC_DIR/$PROGRAM_NAME/scripts/__init__.py
+    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/scripts/hello.py
+
+def main():
+    print 'hello world!'
+
+if __name__ == '__main__':
+    main()
+EOF
+
+}
+
 _setup() {
     dirs=(
         "docs"
+    )
+    pydirs=(
         "$1"
         "$1/scripts"
         "$1/tests"
@@ -79,6 +105,7 @@ clean() {
 generate() {
     _generate_dirs
     _generate_setuppy
+    _generate_entrypoint
 }
 
 make_virtualenv() {
