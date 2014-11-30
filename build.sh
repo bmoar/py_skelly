@@ -71,14 +71,29 @@ EOF
 }
 
 _generate_entrypoint() {
-    touch $SRC_DIR/$PROGRAM_NAME/scripts/__init__.py
     cat <<EOF > $SRC_DIR/$PROGRAM_NAME/scripts/hello.py
 
 def main():
-    print 'hello world!'
+    print('hello world!')
 
 if __name__ == '__main__':
     main()
+EOF
+
+cat <<EOF > $SRC_DIR/$PROGRAM_NAME/tests/test_hello.py
+import unittest
+from $PROGRAM_NAME.scripts.hello import main
+
+class BasicsTestCase(unittest.TestCase):
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+
+    def test_main(self):
+        main()
+
 EOF
 
 }
