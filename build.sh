@@ -8,45 +8,88 @@ SRC_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 INSTALL_PATH="/usr/local/bin/"
 SYSTEM_DEPS="python,python-dev"
 
-clean() {
-    rm -rf $SRC_DIR/build
-    rm -rf $SRC_DIR/dist
-    rm -rf $SRC_DIR/*.egg-info
-    rm -rf $SRC_DIR/*.deb
+dirs=()
+
+_clean_dirs() {
+    for dir in "${dirs[@]}"; do
+        rm -rf $dir
+    done
 }
 
-make() {
-    mkdir -p "$INSTALL_PATH/$PROGRAM_NAME"
+_generate_dirs() {
+    for dir in "${dirs[@]}"; do
+        mkdir -p $dir
+    done
+}
 
-    virtualenv "$INSTALL_PATH/$PROGRAM_NAME"
-    cd $SRC_DIR
-    $INSTALL_PATH/$PROGRAM_NAME/bin/python setup.py install
+_setup_dirs() {
+    dirs=(
+        "docs"
+        "$1"
+        "$1/scripts"
+        "$1/tests"
+        "$1/conf"
+    )
+}
 
-    fpm -s dir -t deb -n $PROGRAM_NAME -v 1.0 -d $SYSTEM_DEPS \
-        $INSTALL_PATH/$PROGRAM_NAME=$INSTALL_PATH
+clean() {
+    _clean_dirs
+}
+
+generate() {
+    _generate_dirs
 }
 
 usage() {
-    echo "build.sh < clean | make >"
-    exit 1
+cat <<EOF
+build.sh option [arg]
+-b | --bootstrap - install all system dependencies needed to run a basic app
+-g <name> | --generate <name> - generate a python module template called name
+-c <name> | --clean <name> - remove generated python template called name
+-v | --virtualenv - create a virtualenv in ~/.virtualenvs and install all the requirements into it
+EOF
+
+exit 1
 }
 
 main() {
-    case $1 in
-        clean)
-            clean
-            ;;
-        make)
-            make
-            ;;
-        *)
-            usage
-            ;;
-    esac
+    options=$@
+    args=($options)
+    i=0
+
+    if [ $# -eq 0 ]; then
+        usage
+    fi
+
+    for arg in $options; do
+        i=$(( $i + 1 ))
+
+        case $arg in
+            -b|--bootstrap|bootstrap)
+                bootstrap
+                break
+                ;;
+            -g|--generate|generate)
+                _setup_dirs "${args[i]}"
+                generate
+                break
+                ;;
+            -c|--clean|clean)
+                _setup_dirs "${args[i]}"
+                clean
+                break
+                ;;
+            -v|--virtualenv|virtualenv)
+                make_virtualenv
+                break
+                ;;
+            *)
+                usage
+                break
+                ;;
+        esac
+    done
+
 }
 
-if [ $# -ne 1 ]; then
-    usage
-fi
-
-main $1
+main $@
