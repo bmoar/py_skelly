@@ -11,35 +11,40 @@ SYSTEM_DEPS="python,python-dev"
 dirs=()
 pydirs=()
 
-_clean_dirs() {
-    for dir in "${dirs[@]}"; do
-        rm -rf $SRC_DIR/$dir
-    done
+_generate_build_script() {
+    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/build.sh
+#!/usr/bin/env bash
 
-    for dir in "${pydirs[@]}"; do
-        rm -rf $SRC_DIR/$dir
-    done
-}
+set -eu
+set -o pipefail
 
-_clean_py() {
-    rm -rf $SRC_DIR/setup.py
-    rm -rf $SRC_DIR/*.egg-info
+PROGRAM_NAME="$PROGRAM_NAME"
+EOF
+    cat $SRC_DIR/build_template >> $SRC_DIR/$PROGRAM_NAME/build.sh
+    chmod +x $SRC_DIR/$PROGRAM_NAME/build.sh
 }
 
 _generate_dirs() {
+    mkdir -p $SRC_DIR/$PROGRAM_NAME
+
     for dir in "${dirs[@]}"; do
-        mkdir -p $SRC_DIR/$dir
+        mkdir -p $SRC_DIR/$PROGRAM_NAME/$dir
     done
 
     # python module dirs need an init
     for dir in "${pydirs[@]}"; do
-        mkdir -p $SRC_DIR/$dir
-        touch $SRC_DIR/$dir/__init__.py
+        mkdir -p $SRC_DIR/$PROGRAM_NAME/$dir
+        touch $SRC_DIR/$PROGRAM_NAME/$dir/__init__.py
     done
 }
 
+_generate_entrypoint_symlink() {
+    cd $SRC_DIR/$PROGRAM_NAME
+    ln -s $PROGRAM_NAME/cli/entry_point.py entry_point.py
+}
+
 _generate_setuppy() {
-    cat <<EOF > $SRC_DIR/setup.py
+    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/setup.py
 from setuptools import setup, find_packages
 
 setup(
@@ -50,7 +55,7 @@ setup(
     zip_safe=False,
     entry_points={
         'console_scripts': [
-            'ci = global_app.scripts.ci:main',
+            'ci = $PROGRAM_NAME.cli.entry_point:main',
         ]
     },
     install_requires=[
@@ -72,55 +77,68 @@ EOF
 }
 
 _generate_entrypoint() {
-    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/scripts/ci.py
+    PROGRAM_APPNAME=$PROGRAM_NAME
+    PROGRAM_APPNAME+="App"
+    cat <<EOF > $SRC_DIR/$PROGRAM_NAME/$PROGRAM_NAME/cli/entry_point.py
+#!/usr/bin/env python
+
 """
-    Entry point for CI scripts
+    Entry point for CLI
 """
 
 from cement.core import foundation
-from global_app.conf.logger import init_logger
+from cement.core.exc import CaughtSignal, FrameworkError
+from cement.core.controller import CementBaseController, expose
 
-def create_app():
-    """
-        Configures an application according to env
-    """
-    app = foundation.CementApp('testing')
+from $PROGRAM_NAME.core.conf.logger import init_logger
 
-    app.setup()
+class BaseController(CementBaseController):
+    class Meta:
+        label = 'base'
+        description = '$PROGRAM_NAME - a python cli skeleton'
+        arguments = [
+            (['-n', '--name'], dict(help='an example arg')),
+        ]
 
-    app.args.add_argument('-t', '--tests', action='store_true', dest='tests', help='Run nose tests')
+    @expose(hide=True)
+    def default(self):
+        self.app.log.info('hello world, this is the default function')
 
-    app.run()
+    @expose(help='run nosetest unit tests')
+    def tests(self):
+        """Run the unit tests and report coverage"""
+        import nose
+        from nose.plugins.cover import Coverage
+        # Don't mess with argv in nose.main(). It requires the first argument in the list to be empty
+        # string. The other two start coverage and set the package to this app.
+        nose.main(argv=['', '--with-coverage', '--cover-branches', '--cover-package=$PROGRAM_NAME'], addplugins=[Coverage()])
 
-    return app
-
-def tests(app=None):
-    import nose
-    from nose.plugins.cover import Coverage
-
-    nose.main(argv=['', '--randomize', '--with-coverage',
-        '--cover-branches', '--cover-package=global_app'],
-        addplugins=[Coverage()])
+class $PROGRAM_APPNAME(foundation.CementApp):
+    class Meta:
+        label = '$PROGRAM_NAME'
+        base_controller = BaseController
 
 def main():
-    # TODO: configure step
-
-    log = init_logger(logger='debug')
-    app = None
+    rc = 0
+    log = init_logger(logger_type='debug')
+    app = $PROGRAM_APPNAME()
 
     try:
-        app = create_app()
+        app.setup()
+        app.log = log
+        app.run()
+    except CaughtSignal as e:
+        app.log.error('caught signal %s' % (e))
+        rc = 1
+    except FrameworkError as e:
+        app.log.error('framework error %s' % (e))
+        rc = 2
     except Exception as e:
-        log.error('Failed to create app')
-        log.debug('Exception: %s' % (e))
-        if app:
-            app.close()
-    if app.pargs.tests:
-        tests()
-    else:
-        log.info('Entry point hit')
+        app.log.error('exception %s' % (e))
+        rc = 1
 
-    app.close()
+    finally:
+        app.close(rc)
 
 if __name__ == '__main__':
     main()
@@ -130,7 +148,7 @@ EOF
 }
 
 _generate_logger(){
-    cat << EOF > $SRC_DIR/$PROGRAM_NAME/conf/logger.py
+    cat << EOF > $SRC_DIR/$PROGRAM_NAME/$PROGRAM_NAME/core/conf/logger.py
 class SyslogtagFilter():
     """ Injects a syslogtag into a log format """
 
@@ -141,10 +159,10 @@ class SyslogtagFilter():
         record.syslogtag = self.syslogtag
         return True
 
-def init_logger(syslogtag='$PROGRAM_NAME', logger='debug'):
+def init_logger(syslogtag='$PROGRAM_NAME', logger_type='debug'):
     import logging, logging.config
 
-    loggers = {
+    logger_types = {
             'version': 1,
             'disable_existing_loggers': True,
             'filters': {
@@ -199,17 +217,17 @@ def init_logger(syslogtag='$PROGRAM_NAME', logger='debug'):
                 'handlers': ['stderr'],
                 },
             }
-    logging.config.dictConfig(loggers)
-    return logging.getLogger(logger)
+    logging.config.dictConfig(logger_types)
+    return logging.getLogger(logger_type)
 EOF
 
 }
 
 _generate_tests() {
 
-cat <<EOF > $SRC_DIR/$PROGRAM_NAME/tests/test_hello.py
+cat <<EOF > $SRC_DIR/$PROGRAM_NAME/$PROGRAM_NAME/core/tests/test_hello.py
 import unittest
-from $PROGRAM_NAME.scripts.ci import main
+from $PROGRAM_NAME.core.conf.logger import init_logger
 
 class BasicsTestCase(unittest.TestCase):
     def setUp(self):
@@ -218,30 +236,34 @@ class BasicsTestCase(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_entry_point(self):
-        pass
+    def test_logger(self):
+        logger = init_logger()
+        logger.info('test')
+        assert logger
 
 EOF
 
 }
 
 _setup() {
+
+    PROGRAM_NAME=$1
+
     dirs=(
         "docs"
     )
     pydirs=(
-        "$1"
-        "$1/scripts"
-        "$1/tests"
-        "$1/conf"
+        "$PROGRAM_NAME"
+        "$PROGRAM_NAME/core"
+        "$PROGRAM_NAME/core/tests"
+        "$PROGRAM_NAME/core/conf"
+        "$PROGRAM_NAME/cli"
     )
 
-    PROGRAM_NAME=$1
 }
 
 clean() {
-    _clean_dirs
-    _clean_py
+    rm -rf $SRC_DIR/$PROGRAM_NAME
 }
 
 generate() {
@@ -250,32 +272,15 @@ generate() {
     _generate_entrypoint
     _generate_logger
     _generate_tests
-}
-
-make_virtualenv() {
-
-    # remove old virtualenv
-    rm -rf $HOME/.virtualenvs/$PROGRAM_NAME
-
-    # create new virtualenv
-    mkdir -p $HOME/.virtualenvs/
-    virtualenv -p /usr/bin/python3 $HOME/.virtualenvs/$PROGRAM_NAME
-
-    # install app
-    set +u
-    source $HOME/.virtualenvs/$PROGRAM_NAME/bin/activate
-    set -u
-    python3 $SRC_DIR/setup.py develop
-
+    _generate_build_script
+    _generate_entrypoint_symlink
 }
 
 usage() {
 cat <<EOF
 build.sh option [arg]
--b | --bootstrap - install all system dependencies needed to run a basic app
 -g <name> | --generate <name> - generate a python module template called name
 -c <name> | --clean <name> - remove generated python template called name
--v | --virtualenv - create a virtualenv in ~/.virtualenvs and install all the requirements into it
 EOF
 
 exit 1
@@ -294,11 +299,6 @@ main() {
         i=$(( $i + 1 ))
 
         case $arg in
-            -b|--bootstrap|bootstrap)
-                _setup "${args[i]}"
-                bootstrap
-                break
-                ;;
             -g|--generate|generate)
                 _setup "${args[i]}"
                 generate
@@ -307,11 +307,6 @@ main() {
             -c|--clean|clean)
                 _setup "${args[i]}"
                 clean
-                break
-                ;;
-            -v|--virtualenv|virtualenv)
-                _setup "${args[i]}"
-                make_virtualenv
                 break
                 ;;
             *)

@@ -1,0 +1,160 @@
+PROGRAM_MAJOR_VERSION="0"
+INSTALL_PATH="/usr/local/bin/"
+SYSTEM_DEPS="python,python-dev"
+
+SRC_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+ANSIBLE_REPO="git@github.com:onshift/OS-ansible"
+ANSIBLE_DEST="$SRC_DIR/OS-ansible"
+
+bootstrap() {
+    echo 'Add a bootstrapping function!'
+
+    #install_deps
+
+    #git clone $ANSIBLE_REPO $ANSIBLE_DEST || ( cd $ANSIBLE_DEST && git pull )
+
+    #cd $ANSIBLE_DEST
+
+    #if [[ "$OSTYPE" == "linux-gnu" ]]; then
+        #ansible-playbook -i inventory/local scheduler.yml --ask-sudo-pass --skip-tags="zero_users,common,secrets"
+    #elif [[ "$OSTYPE" == "darwin"* ]]; then
+        #ansible-playbook -i inventory/local scheduler_mac.yml --ask-sudo-pass
+    #else
+        #echo "Unknown OS type" >&2
+        #exit 1
+    #fi
+}
+
+jenkins() {
+    # build env for jenkins
+
+    echo "add a jenkins function!"
+
+    #install_deps
+
+    #git clone $ANSIBLE_REPO $ANSIBLE_DEST || ( cd $ANSIBLE_DEST && git pull )
+
+    #cd $ANSIBLE_DEST
+
+    #ansible-playbook -i inventory/local scheduler.yml --skip-tags="ufw,zero_users,common,secrets"
+
+    #compile_js
+
+}
+
+clean() {
+    # Clean up packaging artifacts
+    rm -rf $SRC_DIR/build
+    rm -rf $SRC_DIR/dist
+    rm -rf $SRC_DIR/*.egg-info
+    rm -rf $SRC_DIR/*.deb
+    rm -rf $ANSIBLE_DEST
+    rm -rf $INSTALL_PATH/$PROGRAM_NAME
+    find . -name '*.pyc' -delete
+    find . -path '*/__pycache__/*' -delete
+    find . -name '__pycache__' -delete
+}
+
+install_deps() {
+    echo 'add install deps!'
+    # Clone the ansible repo and install all the env dependencies
+    #if [[ "$OSTYPE" == "linux-gnu" ]]; then
+        #sudo apt-get update
+        #sudo apt-get install -y python-pip python-dev python-virtualenv
+    #elif [[ "$OSTYPE" == "darwin"* ]]; then
+        #if [[ ! -f "/usr/local/bin/python" ]]; then
+            #brew update
+            #brew install python
+        #fi
+    #fi
+
+    #sudo pip install ansible
+}
+
+make_virtualenv() {
+
+    # remove old virtualenv
+    rm -rf $HOME/.virtualenvs/$PROGRAM_NAME
+
+    # create new virtualenv
+    mkdir -p $HOME/.virtualenvs/
+    virtualenv -p /usr/bin/python3 $HOME/.virtualenvs/$PROGRAM_NAME
+
+    # install app
+    set +u
+    source $HOME/.virtualenvs/$PROGRAM_NAME/bin/activate
+    set -u
+    python setup.py develop
+
+}
+
+package() {
+    # use fpm to create a .deb
+    # $1 == version number to package
+    mkdir -p "$INSTALL_PATH/$PROGRAM_NAME"
+
+    virtualenv "$INSTALL_PATH/$PROGRAM_NAME"
+    cd $SRC_DIR
+    $INSTALL_PATH/$PROGRAM_NAME/bin/python setup.py install
+
+    fpm -s dir -t deb -n $PROGRAM_NAME -v $1 -d $SYSTEM_DEPS \
+        $INSTALL_PATH/$PROGRAM_NAME=$INSTALL_PATH
+}
+
+usage() {
+    msgs=(
+        'build.sh option [arg]'
+        '-b | --bootstrap - install all system dependencies needed to run the app locally'
+        '-c | --clean - remove build.sh artifacts'
+        '-j | --jenkins - entry point for jenkins to run automated tests'
+        '-p | --package - create a .deb package of the app, requires root'
+        '-v | --virtualenv - create a virtualenv in ~/.virtualenvs and install all the requirements into it'
+    )
+
+    for msg in "${msgs[@]}"; do
+        echo $msg
+    done
+
+    exit 1
+}
+
+main() {
+    options=$@
+    args=($options)
+    i=0
+
+    for arg in $options; do
+        i=$(( $i + 1 ))
+
+        case $arg in
+            -b|--bootstrap|bootstrap)
+                bootstrap
+                break
+                ;;
+            -c|--clean|clean)
+                clean
+                break
+                ;;
+            -j|--jenkins|jenkins)
+                jenkins
+                break
+                ;;
+            -p|--package|package)
+                package "$PROGRAM_MAJOR_VERSION.${args[i]}"
+                break
+                ;;
+            -v|--virtualenv|virtualenv)
+                make_virtualenv
+                break
+                ;;
+            *)
+                usage
+                break
+                ;;
+        esac
+    done
+}
+
+main $@
+
